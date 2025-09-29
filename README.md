@@ -22,9 +22,10 @@ The analysis combines:
 - 🔄 **Auto-updates daily** via GitHub Actions
 - 💾 **Exports summary CSV files** for each ETF
 
+
 ## Live Demo
 
-View the interactive analysis: [em_bonds_analysis.html](https://boquin.xyz/em_bonds_analysis.html)
+View the interactive analysis: [em_bonds_analysis.html](https://datavizhonduran.github.io/EM_spreads_vs_ratings/em_bonds_analysis.html)
 
 ## Installation
 
