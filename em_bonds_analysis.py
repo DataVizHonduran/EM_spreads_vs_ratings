@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from sklearn.linear_model import LinearRegression
 
 # ETF Data URLs
 CEMBI = 'https://www.ishares.com/us/products/239525/ishares-emerging-markets-corporate-bond-etf/1467271812596.ajax?fileType=csv&fileName=CEMB_holdings&dataType=fund'
@@ -150,6 +151,30 @@ def load_etf_data(indexchoice):
     print(f"✓ Loaded {len(df_mean)} countries with bond data")
     return df_mean, chartnames.get(indexchoice, "Unknown")
 
+def calculate_log_regression(x_data, y_data):
+    """Calculate logarithmic regression line"""
+    # Remove any NaN values
+    mask = ~(np.isnan(x_data) | np.isnan(y_data))
+    x_clean = x_data[mask]
+    y_clean = y_data[mask]
+    
+    if len(x_clean) < 2:
+        return None, None
+    
+    # Transform x to log space
+    x_log = np.log(x_clean).reshape(-1, 1)
+    
+    # Fit linear regression on log-transformed x
+    model = LinearRegression()
+    model.fit(x_log, y_clean)
+    
+    # Generate smooth line for plotting
+    x_range = np.linspace(x_clean.min(), x_clean.max(), 100)
+    x_range_log = np.log(x_range).reshape(-1, 1)
+    y_pred = model.predict(x_range_log)
+    
+    return x_range, y_pred
+
 def create_analysis_for_etf(etf_choice, ratings_df):
     """Create analysis for a single ETF"""
     etf_mapping = {
@@ -280,7 +305,27 @@ def create_combined_html_with_dropdown():
                 row=1, col=1
             )
         
-        # Bar chart
+        # Calculate and add logarithmic regression line
+        x_data = df_scat["Rating numbers"].values
+        y_data = df_scat["YTW"].values
+        x_range, y_pred = calculate_log_regression(x_data, y_data)
+        
+        if x_range is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=x_range,
+                    y=y_pred,
+                    mode='lines',
+                    name='Log Regression',
+                    line=dict(color='red', width=2, dash='dash'),
+                    visible=visible,
+                    legendgroup=etf_key,
+                    showlegend=(i == 0)
+                ),
+                row=1, col=1
+            )
+        
+        # Bar chart - all bars same blue color
         spread_data = data['spread_data']
         
         fig.add_trace(
@@ -288,11 +333,7 @@ def create_combined_html_with_dropdown():
                 x=spread_data.iloc[:, 0],
                 y=spread_data['spread_to_mean'],
                 name='Spread',
-                marker=dict(
-                    color=spread_data['spread_to_mean'],
-                    colorscale='RdYlGn_r',
-                    showscale=False
-                ),
+                marker=dict(color='#2471A3'),  # Single blue color
                 visible=visible,
                 legendgroup=etf_key,
                 showlegend=False
@@ -307,7 +348,7 @@ def create_combined_html_with_dropdown():
     
     for etf_key, data in etf_data.items():
         n_outlooks = len(data['scatter_data']['Outlook'].unique())
-        n_traces = n_outlooks + 1  # scatter traces + 1 bar chart
+        n_traces = n_outlooks + 1 + 1  # scatter traces + regression line + 1 bar chart
         traces_per_etf[etf_key] = (trace_idx, n_traces)
         trace_idx += n_traces
     
@@ -330,12 +371,19 @@ def create_combined_html_with_dropdown():
             )
         )
     
-    # Update layout
+    # Update layout with dropdown ABOVE the chart
     fig.update_layout(
-        title=f"{etf_data['EMBI']['name']}: Credit Rating vs Yield Analysis",
-        height=1000,
+        title={
+            'text': f"{etf_data['EMBI']['name']}: Credit Rating vs Yield Analysis",
+            'y': 0.95,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        height=1100,
         showlegend=True,
         plot_bgcolor='#F8F9F9',
+        margin=dict(t=150, b=50, l=50, r=50),  # More top margin for dropdown
         updatemenus=[
             dict(
                 active=0,
@@ -343,9 +391,9 @@ def create_combined_html_with_dropdown():
                 direction="down",
                 pad={"r": 10, "t": 10},
                 showactive=True,
-                x=0.11,
-                xanchor="left",
-                y=1.15,
+                x=0.5,
+                xanchor="center",
+                y=1.08,  # Position above chart
                 yanchor="top",
                 bgcolor='white',
                 bordercolor='gray',
@@ -356,12 +404,12 @@ def create_combined_html_with_dropdown():
             dict(
                 text="Select ETF:",
                 showarrow=False,
-                x=0.01,
-                y=1.15,
+                x=0.5,
+                y=1.12,  # Position above dropdown
                 xref="paper",
                 yref="paper",
-                align="left",
-                font=dict(size=14, color="black")
+                xanchor="center",
+                font=dict(size=14, color="black", family="Arial, sans-serif")
             )
         ]
     )
@@ -379,12 +427,17 @@ def create_combined_html_with_dropdown():
     fig.update_xaxes(title_text="Country", tickangle=-45, row=2, col=1)
     fig.update_yaxes(title_text="Spread (bp)", row=2, col=1)
     
-    # Save as HTML
+    # Save as HTML with include_plotlyjs set to 'cdn' for better compatibility
     output_file = "em_bonds_analysis.html"
-    fig.write_html(output_file)
+    fig.write_html(
+        output_file,
+        include_plotlyjs='cdn',
+        config={'displayModeBar': True, 'displaylogo': False}
+    )
     
     print(f"\n✓ Success! Interactive HTML saved to: {output_file}")
     print(f"✓ ETFs included: {', '.join([d['name'] for d in etf_data.values()])}")
+    print(f"\nTo view locally: Just double-click {output_file} or open in browser")
     
     # Also save summary statistics
     print("\n4. Saving summary statistics...")
