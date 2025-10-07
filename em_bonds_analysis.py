@@ -6,8 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression
 
-# ETF Data URLs
-CEMBI = 'https://www.ishares.com/us/products/239525/ishares-emerging-markets-corporate-bond-etf/1467271812596.ajax?fileType=csv&fileName=CEMB_holdings&dataType=fund'
+# ETF Data URLs - REMOVED CEMBI
 EMBI = 'https://www.ishares.com/us/products/239572/ishares-jp-morgan-usd-emerging-markets-bond-etf/1467271812596.ajax?fileType=csv&fileName=EMB_holdings&dataType=fund'
 GBI = 'https://www.ishares.com/us/products/239528/ishares-emerging-markets-local-currency-bond-etf/1467271812596.ajax?fileType=csv&fileName=LEMB_holdings&dataType=fund'
 
@@ -128,7 +127,7 @@ def process_ratings_data(ratings_df):
 
 def load_etf_data(indexchoice):
     """Load and process ETF holdings data"""
-    chartnames = {EMBI: "EMBI", CEMBI: "CEMBI", GBI: "GBI"}
+    chartnames = {EMBI: "EMBI", GBI: "GBI"}
     
     print(f"Loading ETF data...")
     df = pd.read_csv(indexchoice, header=9)
@@ -179,7 +178,6 @@ def create_analysis_for_etf(etf_choice, ratings_df):
     """Create analysis for a single ETF"""
     etf_mapping = {
         "EMBI": EMBI,
-        "CEMBI": CEMBI, 
         "GBI": GBI
     }
     
@@ -208,13 +206,22 @@ def create_analysis_for_etf(etf_choice, ratings_df):
     df_scat["Rating numbers"] = df_scat["Rating numbers"].apply(pd.to_numeric, errors="coerce")
     df_scat = df_scat[df_scat["Rating numbers"] < 17]
     
-    # Calculate spreads
+    # Calculate spreads - FIX: Use unique countries only
     new_df["Rating numbers"] = pd.to_numeric(new_df["Rating numbers"], errors="coerce")
+    
+    # Group by rating and calculate mean YTW
     mean_ytw = new_df.groupby("Rating numbers")["YTW"].mean().to_dict()
     new_df["mean_ytw"] = new_df["Rating numbers"].map(mean_ytw)
     new_df["spread_to_mean"] = (new_df["YTW"] - new_df["mean_ytw"]) * 100
     
-    new_df_mod = new_df[new_df["Rating numbers"] < 18]
+    # Filter and get unique countries for spread analysis
+    new_df_mod = new_df[new_df["Rating numbers"] < 18].copy()
+    
+    # Reset index to make country a column, then drop duplicates
+    new_df_mod = new_df_mod.reset_index()
+    new_df_mod = new_df_mod.drop_duplicates(subset=[new_df_mod.columns[0]], keep='first')
+    new_df_mod = new_df_mod.set_index(new_df_mod.columns[0])
+    
     n_countries = 20
     
     new_table = pd.concat([
@@ -230,7 +237,7 @@ def create_analysis_for_etf(etf_choice, ratings_df):
     }
 
 def create_combined_html_with_dropdown():
-    """Create HTML file with dropdown menu for all three ETFs"""
+    """Create HTML file with dropdown menu for EMBI and GBI only"""
     
     print("=" * 60)
     print("EMERGING MARKETS BOND ANALYSIS - INTERACTIVE HTML")
@@ -250,9 +257,9 @@ def create_combined_html_with_dropdown():
         print("Error: Could not process ratings data")
         return
     
-    # Process all three ETFs
+    # Process only EMBI and GBI (no CEMBI)
     print("\n2. Processing ETF data...")
-    etfs = ['EMBI', 'CEMBI', 'GBI']
+    etfs = ['EMBI', 'GBI']
     etf_data = {}
     
     for etf in etfs:
@@ -333,7 +340,7 @@ def create_combined_html_with_dropdown():
                 x=spread_data.iloc[:, 0],
                 y=spread_data['spread_to_mean'],
                 name='Spread',
-                marker=dict(color='#2471A3'),  # Single blue color
+                marker=dict(color='#2471A3'),
                 visible=visible,
                 legendgroup=etf_key,
                 showlegend=False
@@ -360,13 +367,21 @@ def create_combined_html_with_dropdown():
         for i in range(start_idx, start_idx + n_traces):
             visible_list[i] = True
         
+        # Set y-axis range for GBI
+        yaxis_update = {}
+        if etf_key == 'GBI':
+            yaxis_update = {'yaxis.range': [0, 15]}
+        
         buttons.append(
             dict(
                 label=data['name'],
                 method='update',
                 args=[
                     {'visible': visible_list},
-                    {'title.text': f"{data['name']}: Credit Rating vs Yield Analysis"}
+                    {
+                        'title.text': f"{data['name']}: Credit Rating vs Yield Analysis",
+                        **yaxis_update
+                    }
                 ]
             )
         )
@@ -383,7 +398,7 @@ def create_combined_html_with_dropdown():
         height=1100,
         showlegend=True,
         plot_bgcolor='#F8F9F9',
-        margin=dict(t=150, b=50, l=50, r=50),  # More top margin for dropdown
+        margin=dict(t=150, b=50, l=50, r=50),
         updatemenus=[
             dict(
                 active=0,
@@ -393,7 +408,7 @@ def create_combined_html_with_dropdown():
                 showactive=True,
                 x=0.5,
                 xanchor="center",
-                y=1.08,  # Position above chart
+                y=1.08,
                 yanchor="top",
                 bgcolor='white',
                 bordercolor='gray',
@@ -405,7 +420,7 @@ def create_combined_html_with_dropdown():
                 text="Select ETF:",
                 showarrow=False,
                 x=0.5,
-                y=1.12,  # Position above dropdown
+                y=1.12,
                 xref="paper",
                 yref="paper",
                 xanchor="center",
@@ -451,7 +466,7 @@ def create_combined_html_with_dropdown():
     print("COMPLETE!")
     print("=" * 60)
     print(f"Upload '{output_file}' to your website")
-    print("The dropdown menu lets users switch between ETFs")
+    print("The dropdown menu lets users switch between EMBI and GBI")
 
 if __name__ == "__main__":
     create_combined_html_with_dropdown()
