@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression
+from datetime import datetime
 
 # ETF Data URLs - REMOVED CEMBI
 EMBI = 'https://www.ishares.com/us/products/239572/ishares-jp-morgan-usd-emerging-markets-bond-etf/1467271812596.ajax?fileType=csv&fileName=EMB_holdings&dataType=fund'
@@ -136,8 +137,9 @@ def load_etf_data(indexchoice):
     df1 = df1.set_index("Location")
     
     df1["year"] = df1["Maturity"].apply(get_year)
-    df1 = df1[df1["year"] < 2035]
-    df1 = df1[df1["year"] > 2027]
+    current_year = datetime.now().year
+    df1 = df1[df1["year"] >= current_year + 7]
+    df1 = df1[df1["year"] <= current_year + 12]
     df1["YTW"] = pd.to_numeric(df1["Yield to Worst (%)"], errors="coerce")
     
     for col in df1.columns:
@@ -201,8 +203,8 @@ def create_analysis_for_etf(etf_choice, ratings_df):
     print(f"✓ {etf_name}: {len(new_df)} countries with complete data")
     
     # Prepare visualization data
-    df_scat = new_df.reset_index()
-    df_scat["Outlook"].fillna("Stable", inplace=True)
+    df_scat = new_df.reset_index().copy()
+    df_scat["Outlook"] = df_scat["Outlook"].fillna("Stable")
     df_scat["Rating numbers"] = df_scat["Rating numbers"].apply(pd.to_numeric, errors="coerce")
     df_scat = df_scat[df_scat["Rating numbers"] < 17]
     
